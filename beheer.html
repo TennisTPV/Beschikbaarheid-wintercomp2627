@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Wintercompetitie Beheer</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <div>
+      <h1>🎾 Beheer</h1>
+      <p>Wintercompetitie 2026-2027 · overzicht voor de aanvoerder</p>
+    </div>
+    <div class="knltb-mark" aria-label="KNLTB">KNLTB</div>
+  </header>
+
+  <section class="card" id="login-card">
+    <div class="card-accent"></div>
+    <h2 class="card-title">Inloggen</h2>
+    <p class="card-sub">Vul de beheercode in die je in Apps Script hebt ingesteld.</p>
+    <form id="login" class="fields">
+      <label class="field" for="key">Beheercode
+        <input type="password" id="key" autocomplete="current-password" required>
+      </label>
+      <button type="submit" class="btn btn-save">Bekijk antwoorden</button>
+      <div class="status" id="login-status" role="status"></div>
+    </form>
+  </section>
+
+  <div id="admin" hidden>
+    <div class="section-heading">Overzicht per speeldag</div>
+    <section class="card">
+      <div class="card-accent"></div>
+      <p class="card-sub" id="summary-line"></p>
+      <div class="days" id="days"></div>
+      <div class="actions">
+        <button type="button" class="btn btn-copy" id="refresh">Vernieuwen</button>
+        <button type="button" class="btn btn-save" id="logout">Uitloggen</button>
+      </div>
+    </section>
+
+    <div class="section-heading">Spelers</div>
+    <section class="card">
+      <div class="card-accent"></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Naam</th><th>Wil spelen</th><th class="num">Kan</th><th></th></tr></thead>
+          <tbody id="players"></tbody>
+        </table>
+      </div>
+      <p class="card-sub" style="margin:12px 0 0">Een antwoord van iemand die via WhatsApp reageert? Vul het zelf in op de invulpagina met zijn naam en jouw e-mailadres, of pas het direct aan in de Google Sheet.</p>
+    </section>
+  </div>
+
+  <div class="footer-note" id="footer"></div>
+</div>
+
+<script src="config.js"></script>
+<script>
+let key = "";
+try { key = localStorage.getItem("wc-admin") || ""; } catch {}
+$("footer").textContent = `Deadline voor spelers: ${fmtDeadline()}`;
+
+async function load() {
+  $("login-status").textContent = "Bezig met laden…";
+  try {
+    const res = await api({ action: "admin", key });
+    try { localStorage.setItem("wc-admin", key); } catch {}
+    $("login-card").hidden = true; $("admin").hidden = false;
+    render(res.records);
+  } catch (x) {
+    $("login-card").hidden = false; $("admin").hidden = true;
+    $("login-status").textContent = x.message === "forbidden" ? "Onjuiste beheercode." : "Laden mislukt: " + x.message;
+    $("login-status").className = "status err";
+  }
+}
+
+function render(list) {
+  const n = list.length;
+  $("summary-line").textContent = n
+    ? `${n} speler${n > 1 ? "s hebben" : " heeft"} ingevuld. Groen = genoeg spelers (${CONFIG.NEEDED}+), oranje = te weinig.`
+    : "Nog geen antwoorden.";
+  $("days").innerHTML = "";
+  CONFIG.DATES.forEach(d => {
+    const yes = list.filter(r => r.avail?.[d.iso] === true);
+    const no = list.filter(r => r.avail?.[d.iso] === false);
+    const el = document.createElement("div");
+    el.className = "day";
+    el.innerHTML = `<div class="day-top"><div class="day-date">${fmtLong(d.iso)}<small>Week ${d.week}</small></div>
+      <span class="count ${yes.length >= CONFIG.NEEDED ? "ok" : "low"}">${yes.length} kunnen</span></div>
+      <div class="chips">${
+        yes.map(r => `<span class="chip${r.wish === "inval" ? " inval" : ""}">${esc(r.name)}${r.wish === "inval" ? " (inval)" : ""}</span>`).join("") +
+        no.map(r => `<span class="chip no">${esc(r.name)}</span>`).join("") ||
+        `<span class="empty">Nog geen antwoorden</span>`
+      }</div>`;
+    $("days").appendChild(el);
+  });
+
+  const pageUrl = new URL("index.html", location.href).href;
+  $("players").innerHTML = n ? "" : `<tr><td colspan="4" class="empty">Nog niemand heeft ingevuld.</td></tr>`;
+  [...list].sort((a, b) => a.name.localeCompare(b.name, "nl")).forEach(r => {
+    const can = CONFIG.DATES.filter(d => r.avail?.[d.iso] === true).length;
+    const pill = r.wish === "inval" ? " inval" : r.wish === "max" ? " max" : "";
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${esc(r.name)}${r.note ? `<div class="small" style="font-size:12px;color:var(--muted);margin-top:2px">${esc(r.note)}</div>` : ""}
+        <div style="font-size:12px;color:var(--muted)">${esc(r.email)}</div></td>
+      <td><span class="pill${pill}">${esc(wishText(r))}</span></td>
+      <td class="num">${can}/${CONFIG.DATES.length}</td>
+      <td><button type="button" class="row-edit">Link</button></td>`;
+    tr.querySelector("button").onclick = async e => {
+      const link = pageUrl + "?t=" + encodeURIComponent(r.token);
+      try { await navigator.clipboard.writeText(link); e.target.textContent = "Gekopieerd"; }
+      catch { e.target.replaceWith(Object.assign(document.createElement("input"), { value: link, readOnly: true })); }
+    };
+    $("players").appendChild(tr);
+  });
+}
+
+$("login").addEventListener("submit", e => { e.preventDefault(); key = $("key").value.trim(); load(); });
+$("refresh").onclick = load;
+$("logout").onclick = () => { try { localStorage.removeItem("wc-admin"); } catch {} key = ""; $("key").value = ""; $("admin").hidden = true; $("login-card").hidden = false; $("login-status").textContent = ""; };
+if (key) load();
+</script>
+</body>
+</html>
