@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wintercompetitie Beschikbaarheid</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <div>
+      <h1>🎾 Raamsdonksveer</h1>
+      <p>KNLTB Wintercompetitie 2026-2027 · zaterdag · gemengd dubbel</p>
+    </div>
+    <div class="knltb-mark" aria-label="KNLTB">KNLTB</div>
+  </header>
+
+  <section class="card" id="form-card">
+    <div class="card-accent"></div>
+    <h2 class="card-title">Wanneer kun jij spelen?</h2>
+    <p class="card-sub">Vul je gegevens in, tik per speeldag op Ja of Nee en geef aan hoe vaak je in totaal wilt spelen. Na het opslaan krijg je een persoonlijke link (ook per mail) waarmee je je antwoord kunt aanpassen.</p>
+    <div class="banner" id="banner"></div>
+
+    <form id="form" autocomplete="on">
+      <fieldset id="fs">
+        <div class="fields">
+          <label class="field" for="name">Naam
+            <input type="text" id="name" name="name" placeholder="Voornaam + achternaam" maxlength="40" required>
+          </label>
+          <label class="field" for="email">E-mail <span class="field-hint">voor je persoonlijke link</span>
+            <input type="email" id="email" name="email" placeholder="naam@voorbeeld.nl" maxlength="80" required>
+          </label>
+          <div class="field" role="group" aria-labelledby="g-label"><span id="g-label">Ik speel als</span>
+            <div class="seg" id="gender">
+              <button type="button" data-g="H" aria-pressed="false">Heer</button>
+              <button type="button" data-g="D" aria-pressed="false">Dame</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-title">Speeldagen</div>
+        <div class="date-list" id="date-list"></div>
+        <div class="bulk">
+          <button type="button" class="link-btn" id="all-yes">Overal ja</button>
+          <button type="button" class="link-btn" id="all-no">Overal nee</button>
+        </div>
+
+        <div class="section-title">Hoe vaak wil je in totaal spelen?</div>
+        <div class="wish" id="wish" role="group" aria-label="Aantal keer spelen"></div>
+        <div class="other-n" id="other-wrap" hidden>
+          <label for="other-n">Aantal keer:</label>
+          <input type="number" id="other-n" min="1" max="7" value="4">
+        </div>
+
+        <label class="section-title" for="note" style="display:block">Opmerking (optioneel)</label>
+        <textarea id="note" maxlength="300" placeholder="Bijv. liever niet twee weken achter elkaar, of: graag spelen met een vaste dubbelpartner"></textarea>
+
+        <div class="actions">
+          <button type="submit" class="btn btn-save btn-full" id="save">Opslaan</button>
+        </div>
+      </fieldset>
+      <div class="status" id="status" role="status"></div>
+
+      <div class="link-card" id="link-card" hidden>
+        <strong>Opgeslagen ✔</strong>
+        <p id="link-text">Met deze persoonlijke link kun je je antwoord aanpassen.</p>
+        <div class="link-row">
+          <input type="text" id="my-link" readonly aria-label="Persoonlijke link">
+          <button type="button" class="small-btn" id="copy-link">Kopieer</button>
+        </div>
+      </div>
+
+      <div class="note" id="resend-box" hidden>
+        Er staat al een antwoord op deze naam. Open je persoonlijke link uit de mail, of
+        <button type="button" class="link-btn" id="resend">stuur mijn link opnieuw</button>.
+      </div>
+    </form>
+  </section>
+
+  <div class="footer-note" id="footer"></div>
+</div>
+
+<script src="config.js"></script>
+<script>
+const WISHES = [
+  { v: "inval", label: "Alleen invallen" },
+  { v: "1", label: "1×" }, { v: "2", label: "2×" }, { v: "3", label: "3×" },
+  { v: "anders", label: "Ander aantal" },
+  { v: "max", label: "Zoveel mogelijk" },
+];
+let state = { avail: {}, wish: "", other: 4, gender: "" };
+let token = new URLSearchParams(location.search).get("t");
+try { if (!token) token = localStorage.getItem("wc-token-za"); } catch {}
+
+$("footer").innerHTML = `Aanvoerder: ${CONFIG.CAPTAIN}<br>Gemengd dubbel · speeldata volgens het KNLTB-schema. Tegenstanders en tijden volgen zodra de poule-indeling bekend is.`;
+
+function renderForm() {
+  $("date-list").innerHTML = "";
+  CONFIG.DATES.forEach(d => {
+    const v = state.avail[d.iso];
+    const row = document.createElement("div");
+    row.className = "date-row";
+    row.innerHTML = `<div class="d"><strong>${fmtLong(d.iso)}</strong><span>Week ${d.week}</span></div>
+      <div class="seg" role="group" aria-label="${fmtLong(d.iso)}">
+        <button type="button" class="ja" aria-pressed="${v === true}">Ja</button>
+        <button type="button" class="nee" aria-pressed="${v === false}">Nee</button>
+      </div>`;
+    const [ja, nee] = row.querySelectorAll("button");
+    ja.onclick = () => { state.avail[d.iso] = true; renderForm(); };
+    nee.onclick = () => { state.avail[d.iso] = false; renderForm(); };
+    $("date-list").appendChild(row);
+  });
+  $("wish").innerHTML = "";
+  WISHES.forEach(w => {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = w.label;
+    b.setAttribute("aria-pressed", state.wish === w.v);
+    b.onclick = () => { state.wish = w.v; renderForm(); };
+    $("wish").appendChild(b);
+  });
+  $("other-wrap").hidden = state.wish !== "anders";
+  document.querySelectorAll("#gender button").forEach(b => b.setAttribute("aria-pressed", state.gender === b.dataset.g));
+}
+document.querySelectorAll("#gender button").forEach(b => b.onclick = () => { state.gender = b.dataset.g; renderForm(); });
+$("all-yes").onclick = () => { CONFIG.DATES.forEach(d => state.avail[d.iso] = true); renderForm(); };
+$("all-no").onclick = () => { CONFIG.DATES.forEach(d => state.avail[d.iso] = false); renderForm(); };
+$("other-n").oninput = e => { state.other = Math.max(1, Math.min(7, parseInt(e.target.value) || 1)); };
+
+function setStatus(msg, cls) { $("status").textContent = msg; $("status").className = "status " + (cls || ""); }
+function setBanner(html, locked) { $("banner").innerHTML = html; $("banner").className = "banner" + (locked ? " locked" : ""); }
+function myLink(t) { return location.origin + location.pathname + "?t=" + encodeURIComponent(t); }
+
+function fill(r) {
+  $("name").value = r.name || "";
+  $("email").value = r.email || "";
+  state.avail = { ...(r.avail || {}) };
+  state.wish = r.wish || "";
+  state.gender = r.gender || "";
+  state.other = r.wishN || 4;
+  $("other-n").value = state.other;
+  $("note").value = r.note || "";
+  renderForm();
+}
+
+function validate() {
+  if (!$("name").value.trim()) return "Vul je naam in.";
+  if (!$("email").checkValidity() || !$("email").value.trim()) return "Vul een geldig e-mailadres in.";
+  if (!state.gender) return "Kies of je als heer of dame speelt.";
+  const missing = CONFIG.DATES.filter(d => typeof state.avail[d.iso] !== "boolean").length;
+  if (missing) return `Kies nog Ja of Nee bij ${missing} speeldag${missing > 1 ? "en" : ""}.`;
+  if (!state.wish) return "Geef aan hoe vaak je in totaal wilt spelen.";
+  return null;
+}
+
+$("form").addEventListener("submit", async e => {
+  e.preventDefault();
+  if (isClosed()) return setStatus("De deadline is verstreken. Neem contact op met de aanvoerder.", "err");
+  const err = validate();
+  if (err) return setStatus(err, "err");
+  $("resend-box").hidden = true;
+  $("save").disabled = true; setStatus("Bezig met opslaan…", "");
+  try {
+    const res = await api({
+      action: "save", token,
+      name: $("name").value.trim(), email: $("email").value.trim(),
+      avail: state.avail, wish: state.wish, gender: state.gender,
+      wishN: state.wish === "anders" ? state.other : null,
+      note: $("note").value.trim(),
+      pageUrl: location.origin + location.pathname,
+    });
+    token = res.token;
+    try { localStorage.setItem("wc-token-za", token); } catch {}
+    history.replaceState(null, "", "?t=" + encodeURIComponent(token));
+    $("my-link").value = myLink(token);
+    $("link-text").textContent = res.mailed
+      ? `Bewaar deze link: hiermee pas je je antwoord aan tot ${fmtDeadline()}. We hebben hem ook gemaild naar ${$("email").value.trim()}.`
+      : `Bewaar deze link: hiermee pas je je antwoord aan tot ${fmtDeadline()}.`;
+    $("link-card").hidden = false;
+    setStatus("", "");
+    setBanner(`Je past je eigen antwoord aan. Dat kan tot <strong>${fmtDeadline()}</strong>.`);
+  } catch (x) {
+    if (x.message === "name_taken") { $("resend-box").hidden = false; setStatus("", ""); }
+    else setStatus("Opslaan is niet gelukt: " + x.message, "err");
+  } finally { $("save").disabled = false; }
+});
+
+$("banner").addEventListener("click", e => {
+  if (e.target.id !== "not-me") return;
+  token = null;
+  try { localStorage.removeItem("wc-token-za"); } catch {}
+  history.replaceState(null, "", location.pathname);
+  fill({}); $("link-card").hidden = true;
+  setBanner(`Invullen en aanpassen kan tot <strong>${fmtDeadline()}</strong>.`);
+});
+
+$("copy-link").onclick = async () => {
+  try { await navigator.clipboard.writeText($("my-link").value); $("copy-link").textContent = "Gekopieerd"; }
+  catch { $("my-link").select(); }
+};
+
+$("resend").onclick = async () => {
+  try {
+    await api({ action: "resend", name: $("name").value.trim(), pageUrl: location.origin + location.pathname });
+    $("resend-box").textContent = "Als er een e-mailadres bij deze naam hoort, is de link opnieuw verstuurd. Kijk ook in je spam.";
+  } catch (x) { setStatus("Versturen is niet gelukt: " + x.message, "err"); }
+};
+
+async function init() {
+  renderForm();
+  const closed = isClosed();
+  setBanner(closed
+    ? `Invullen en aanpassen kon tot ${fmtDeadline()}. Wijzigingen? Neem contact op met de aanvoerder.`
+    : `Invullen en aanpassen kan tot <strong>${fmtDeadline()}</strong>.`, closed);
+  if (closed) $("fs").disabled = true;
+  if (!token) return;
+  setStatus("Je antwoord wordt geladen…", "");
+  try {
+    const res = await api({ action: "get", token });
+    fill(res.record);
+    setStatus("", "");
+    if (!closed) setBanner(`Je past het antwoord van <strong>${esc(res.record.name)}</strong> aan. Dat kan tot <strong>${fmtDeadline()}</strong>. <button type="button" class="link-btn" id="not-me">Niet jij? Begin opnieuw</button>`);
+  } catch {
+    token = null;
+    try { localStorage.removeItem("wc-token-za"); } catch {}
+    setStatus("Deze persoonlijke link is niet (meer) geldig. Vul het formulier opnieuw in.", "err");
+  }
+}
+init();
+</script>
+</body>
+</html>
